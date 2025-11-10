@@ -13,9 +13,10 @@ github.com/elazarl/goproxy
 # github.com/fatih/color v1.13.0
 ## explicit; go 1.13
 github.com/fatih/color
-# github.com/fsnotify/fsnotify v1.5.1
-## explicit; go 1.13
+# github.com/fsnotify/fsnotify v1.9.0
+## explicit; go 1.17
 github.com/fsnotify/fsnotify
+github.com/fsnotify/fsnotify/internal
 # github.com/go-acme/lego/v3 v3.1.0
 ## explicit; go 1.13
 github.com/go-acme/lego/v3/acme
@@ -76,7 +77,7 @@ github.com/mitchellh/mapstructure
 # github.com/mwitkow/go-http-dialer v0.0.0-20161116154839-378f744fb2b8
 ## explicit
 github.com/mwitkow/go-http-dialer
-# github.com/pelletier/go-toml v1.9.4
+# github.com/pelletier/go-toml v1.9.5
 ## explicit; go 1.12
 github.com/pelletier/go-toml
 # github.com/spf13/afero v1.8.1
@@ -103,10 +104,16 @@ github.com/spf13/viper/internal/encoding/yaml
 # github.com/subosito/gotenv v1.2.0
 ## explicit
 github.com/subosito/gotenv
-# github.com/tdewolff/minify/v2 v2.24.6
+# github.com/tdewolff/minify/v2 v2.24.7
 ## explicit; go 1.24.0
 github.com/tdewolff/minify/v2
 github.com/tdewolff/minify/v2/js
+# github.com/tdewolff/parse/v2 v2.8.5
+## explicit; go 1.11
+github.com/tdewolff/parse/v2
+github.com/tdewolff/parse/v2/buffer
+github.com/tdewolff/parse/v2/js
+github.com/tdewolff/parse/v2/strconv
 # github.com/tidwall/btree v0.0.0-20170113224114-9876f1454cf0
 ## explicit
 github.com/tidwall/btree
@@ -179,8 +186,8 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/proxy
 golang.org/x/net/publicsuffix
-# golang.org/x/sys v0.18.0
-## explicit; go 1.18
+# golang.org/x/sys v0.37.0
+## explicit; go 1.24.0
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # golang.org/x/text v0.14.0
