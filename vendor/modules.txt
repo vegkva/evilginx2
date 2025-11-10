@@ -103,6 +103,10 @@ github.com/spf13/viper/internal/encoding/yaml
 # github.com/subosito/gotenv v1.2.0
 ## explicit
 github.com/subosito/gotenv
+# github.com/tdewolff/minify/v2 v2.24.6
+## explicit; go 1.24.0
+github.com/tdewolff/minify/v2
+github.com/tdewolff/minify/v2/js
 # github.com/tidwall/btree v0.0.0-20170113224114-9876f1454cf0
 ## explicit
 github.com/tidwall/btree
