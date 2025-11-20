@@ -111,8 +111,6 @@ func main() {
 	showEvilginxProAd()
 	showEvilginxMasteryAd()
 
-	installRoadrecon()
-
 	_log.SetOutput(log.NullLogger().Writer())
 	certmagic.Default.Logger = zap.NewNop()
 	certmagic.DefaultACME.Logger = zap.NewNop()
@@ -226,6 +224,7 @@ func main() {
 		return
 	}
 	if *devicecode_mode {
+		installRoadrecon()
 		log.Info("Devicecode mode enabled")
 	}
 	hp, _ := core.NewHttpProxy(cfg.GetServerBindIP(), cfg.GetHttpsPort(), cfg, crt_db, db, bl, *developer_mode, *devicecode_mode)
