@@ -6,6 +6,7 @@ import (
 	_log "log"
 	"os"
 	"os/user"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/kgretzky/evilginx2/log"
 	"go.uber.org/zap"
 
-	"github.com/fatih/color"
+	
 )
 
 var phishlets_dir = flag.String("p", "", "Phishlets directory path")
@@ -24,6 +25,8 @@ var debug_log = flag.Bool("debug", false, "Enable debug output")
 var developer_mode = flag.Bool("developer", false, "Enable developer mode (generates self-signed certificates for all hostnames)")
 var cfg_dir = flag.String("c", "", "Configuration directory path")
 var version_flag = flag.Bool("v", false, "Show version")
+var devicecode_mode = flag.Bool("devicecode", false, "Enable devicecode mode")
+var interactiveauth_mode = flag.Bool("interactiveauth", false, "Enable interactiveauth mode. Utilizes roadtx to fetch .roadtools_auth using estscookie")
 
 func joinPath(base_path string, rel_path string) string {
 	var ret string
@@ -35,21 +38,87 @@ func joinPath(base_path string, rel_path string) string {
 	return ret
 }
 
-func showEvilginxProAd() {
-	lred := color.New(color.FgHiRed)
-	lyellow := color.New(color.FgHiYellow)
-	white := color.New(color.FgHiWhite)
-	message := fmt.Sprintf("%s %s: %s %s", lred.Sprint("Evilginx Pro"), white.Sprint("is finally out"), lyellow.Sprint("https://evilginx.com"), white.Sprint("(advanced phishing framework for red teams)"))
-	log.Info("%s", message)
+
+func installRoadrecon() {
+
+	venvDir := "venv"
+	python := "venv/bin/python"
+
+	// 1. Check if venv exists — if not, create it
+	if _, err := os.Stat(python); os.IsNotExist(err) {
+		fmt.Println("Virtual environment not found — creating...")
+		cmd := exec.Command("python3", "-m", "venv", venvDir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal("Failed to create venv: %v", err)
+		}
+	}
+
+	// 2. Check if createCode is installed inside the venv
+	fmt.Println("Checking if 'roadrecon' is installed...")
+	cmd := exec.Command(python, "-m", "pip", "show", "roadrecon")
+	if err := cmd.Run(); err != nil {
+		fmt.Println("'roadrecon' not found — installing...")
+		cmd := exec.Command(python, "-m", "pip", "install", "--upgrade", "pip", "-q")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal("Failed to upgrade pip: %v", err)
+		}
+
+		cmd = exec.Command(python, "-m", "pip", "install", "roadrecon", "-q")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal("Failed to install roadrecon: %v", err)
+		}
+	} else {
+		fmt.Println("'roadrecon' is already installed.")
+	}
+
 }
 
-func showEvilginxMasteryAd() {
-	lyellow := color.New(color.FgHiYellow)
-	white := color.New(color.FgHiWhite)
-	hcyan := color.New(color.FgHiCyan)
-	message := fmt.Sprintf("%s: %s %s", hcyan.Sprint("Evilginx Mastery Course"), lyellow.Sprint("https://academy.breakdev.org/evilginx-mastery"), white.Sprint("(learn how to create phishlets)"))
-	log.Info("%s", message)
+func installRoadtx() {
+
+	venvDir := "venv"
+	python := "venv/bin/python3"
+
+	// 1. Check if venv exists — if not, create it
+	if _, err := os.Stat(python); os.IsNotExist(err) {
+		fmt.Println("Virtual environment not found — creating...")
+		cmd := exec.Command("python3", "-m", "venv", venvDir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal("Failed to create venv: %v", err)
+		}
+	}
+
+	// 2. Check if createCode is installed inside the venv
+	fmt.Println("Checking if 'roadtx' is installed...")
+	cmd := exec.Command(python, "-m", "pip", "show", "roadtx")
+	if err := cmd.Run(); err != nil {
+		fmt.Println("'roadtx' not found — installing...")
+		cmd := exec.Command(python, "-m", "pip", "install", "--upgrade", "pip", "-q")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal("Failed to upgrade pip: %v", err)
+		}
+
+		cmd = exec.Command(python, "-m", "pip", "install", "roadtx", "-q")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal("Failed to install roadtx: %v", err)
+		}
+	} else {
+		fmt.Println("'roadtx' is already installed.")
+	}
+
 }
+
 
 func main() {
 	flag.Parse()
@@ -62,9 +131,12 @@ func main() {
 	exe_path, _ := os.Executable()
 	exe_dir := filepath.Dir(exe_path)
 
+
+
 	core.Banner()
-	showEvilginxProAd()
-	showEvilginxMasteryAd()
+
+	
+	
 
 	_log.SetOutput(log.NullLogger().Writer())
 	certmagic.Default.Logger = zap.NewNop()
@@ -178,8 +250,15 @@ func main() {
 		log.Fatal("certdb: %v", err)
 		return
 	}
-
-	hp, _ := core.NewHttpProxy(cfg.GetServerBindIP(), cfg.GetHttpsPort(), cfg, crt_db, db, bl, *developer_mode)
+	if *devicecode_mode {
+		installRoadrecon()
+		log.Info("Devicecode mode enabled")
+	}
+	if *interactiveauth_mode {
+		//installRoadtx() fix custom headless
+		log.Info("Interactiveauth mode enabled, requires roadtx (with headless mode)")
+	}
+	hp, _ := core.NewHttpProxy(cfg.GetServerBindIP(), cfg.GetHttpsPort(), cfg, crt_db, db, bl, *developer_mode, *devicecode_mode, *interactiveauth_mode)
 	hp.Start()
 
 	t, err := core.NewTerminal(hp, cfg, crt_db, db, *developer_mode)
