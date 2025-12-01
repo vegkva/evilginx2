@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -76,6 +77,26 @@ func (t *Terminal) Close() {
 func (t *Terminal) output(s string, args ...interface{}) {
 	out := fmt.Sprintf(s, args...)
 	fmt.Fprintf(color.Output, "\n%s\n", out)
+}
+
+
+func killRoadrecon() error {
+	fmt.Println("Killing roadrecon")
+	cmd := exec.Command("pkill", "-f", "roadrecon auth")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to kill processes: %w", err)
+	}
+	return nil
+}
+
+
+func killRoadtx() error {
+	fmt.Println("Killing roadtx")
+	cmd := exec.Command("pkill", "-f", "roadtx interactiveauth")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to kill processes: %w", err)
+	}
+	return nil
 }
 
 func (t *Terminal) DoWork() {
@@ -168,6 +189,8 @@ func (t *Terminal) DoWork() {
 		case "q", "quit", "exit":
 			do_quit = true
 			cmd_ok = true
+			killRoadrecon()
+			killRoadtx()
 		default:
 			log.Error("unknown command: %s", args[0])
 			cmd_ok = true
@@ -178,6 +201,8 @@ func (t *Terminal) DoWork() {
 		t.checkStatus()
 	}
 }
+
+
 
 func (t *Terminal) handleConfig(args []string) error {
 	pn := len(args)
